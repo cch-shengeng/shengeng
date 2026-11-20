@@ -136,7 +136,8 @@ def parse_list(page_html, cid):
         title = re.sub(r'\s+', ' ', title).strip(' -｜|')
         if not title:
             continue
-        if summary and (summary == title or title.startswith(summary) or summary.startswith(title)):
+        nt, ns = re.sub(r'[\s　]', '', title), re.sub(r'[\s　]', '', summary)
+        if ns and (ns == nt or nt.startswith(ns) or ns.startswith(nt)):
             summary = ''
         if len(summary) > 90:
             summary = summary[:88].rstrip() + '…'

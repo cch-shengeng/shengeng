@@ -11,6 +11,7 @@
 醫院網頁改版時，通常只需要調整下方「設定」區。
 """
 import html
+import threading
 import json
 import os
 import re
@@ -30,27 +31,67 @@ SECTIONS = {               # 輸出名稱: 醫院系統的分類 cID
 GET_IMAGE = {'results'}    # 這些分類會進入文章抓第一張照片
 MAX_PAGES = 20             # 每個分類最多讀幾頁列表
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cms.json')
+TIME_BUDGET = int(os.environ.get('SYNC_TIME_BUDGET', 8 * 60))       # 總執行時間上限（秒），超過就先存已抓到的，其餘下次再抓
+REQUEST_LIMIT = int(os.environ.get('SYNC_REQUEST_LIMIT', 45))        # 單一網頁最多等幾秒
 KEEPALIVE_DAYS = 30        # 內容沒變時，每隔幾天仍更新一次時間戳，避免 GitHub 停用排程
 # ================================================
 
 TW = timezone(timedelta(hours=8))
+START = time.monotonic()
+try:  # 讓 GitHub 的執行紀錄即時顯示進度
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except AttributeError:
+    pass
+
+
+def over_budget():
+    return time.monotonic() - START > TIME_BUDGET
 UA = 'Mozilla/5.0 (compatible; CCH-Shengeng-Sync/1.0; +https://github.com)'
 
 
+def _get(url):
+    req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept-Language': 'zh-TW,zh;q=0.9'})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        cs = r.headers.get_content_charset() or 'utf-8'
+        chunks, t0 = [], time.monotonic()
+        while True:
+            b = r.read(65536)
+            if not b:
+                break
+            chunks.append(b)
+            if time.monotonic() - t0 > REQUEST_LIMIT:
+                raise TimeoutError('下載太慢')
+    raw = b''.join(chunks)
+    try:
+        return raw.decode(cs)
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode('utf-8', errors='replace')
+
+
 def fetch(url, tries=3):
+    """讀取網頁；每次最多等 REQUEST_LIMIT 秒（連 DNS 卡住也算），失敗會重試。"""
     for i in range(tries):
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept-Language': 'zh-TW,zh;q=0.9'})
-            with urllib.request.urlopen(req, timeout=30) as r:
-                raw = r.read()
-                cs = r.headers.get_content_charset() or 'utf-8'
+        box = {}
+
+        def work():
             try:
-                return raw.decode(cs)
-            except (LookupError, UnicodeDecodeError):
-                return raw.decode('utf-8', errors='replace')
-        except Exception as e:  # noqa: BLE001
-            print(f'  ! 讀取失敗（第 {i + 1} 次）{url}: {e}', file=sys.stderr)
-            time.sleep(3 * (i + 1))
+                box['ok'] = _get(url)
+            except Exception as e:  # noqa: BLE001
+                box['err'] = e
+        t0 = time.monotonic()
+        th = threading.Thread(target=work, daemon=True)
+        th.start()
+        th.join(REQUEST_LIMIT + 5)
+        took = time.monotonic() - t0
+        if 'ok' in box:
+            print(f'    ✓ {took:.1f} 秒　{url}')
+            return box['ok']
+        err = box.get('err', f'超過 {REQUEST_LIMIT} 秒沒有回應')
+        print(f'  ! 讀取失敗（第 {i + 1} 次，{took:.0f} 秒）{url}：{err}', file=sys.stderr)
+        if over_budget():
+            break
+        time.sleep(3 * (i + 1))
     raise RuntimeError(f'無法讀取 {url}')
 
 
@@ -119,7 +160,13 @@ def crawl(section, cid, cache):
     found, order = {}, []
     for p in range(1, MAX_PAGES + 1):
         url = f'{BASE}item.aspx?cID={cid}&ID={SITE_ID}' + (f'&p={p}' if p > 1 else '')
-        items = parse_list(fetch(url), cid)
+        try:
+            items = parse_list(fetch(url), cid)
+        except RuntimeError as e:
+            if p == 1:
+                raise
+            print(f'  ! 第 {p} 頁讀取失敗，先用已讀到的：{e}', file=sys.stderr)
+            break
         new = [k for k in items if k not in found]
         print(f'  {section} 第 {p} 頁：{len(items)} 篇，新的 {len(new)} 篇')
         if not new:
@@ -136,6 +183,10 @@ def crawl(section, cid, cache):
         if section in GET_IMAGE:
             if old.get('_checked'):
                 it['圖片連結'] = old.get('圖片連結', '')
+            elif over_budget():
+                it['圖片連結'] = old.get('圖片連結', '')  # 時間不夠，照片下次再抓
+                out.append(it)
+                continue
             else:
                 try:
                     it['圖片連結'] = first_image(it['文章連結'])
@@ -152,6 +203,7 @@ def crawl(section, cid, cache):
 
 
 def main():
+    print(f'開始同步：{BASE}（單頁上限 {REQUEST_LIMIT} 秒，總時間上限 {TIME_BUDGET // 60} 分鐘）')
     try:
         with open(OUT, encoding='utf-8') as f:
             prev = json.load(f)
@@ -162,7 +214,11 @@ def main():
     for section, cid in SECTIONS.items():
         print(f'讀取 {section}（cID={cid}）')
         cache = {x.get('key'): x for x in prev.get(section, []) if x.get('key')}
-        rows = crawl(section, cid, cache)
+        try:
+            rows = crawl(section, cid, cache)
+        except RuntimeError as e:
+            print(f'✗ 連不到醫院網頁：{e}\n  可能是醫院網站擋了 GitHub 的海外主機，或網站暫時沒有回應。網站會繼續顯示上次的資料。', file=sys.stderr)
+            sys.exit(1)
         if not rows:
             # 一篇都抓不到 → 多半是醫院網頁改版或暫時連不上，保留舊資料並回報失敗
             print(f'✗ {section} 一篇文章都沒抓到，保留舊資料。請檢查醫院網頁是否改版。', file=sys.stderr)

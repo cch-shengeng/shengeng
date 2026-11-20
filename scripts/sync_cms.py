@@ -32,6 +32,7 @@ GET_IMAGE = {'results'}    # 這些分類會進入文章抓第一張照片
 MAX_PAGES = 20             # 每個分類最多讀幾頁列表
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cms.json')
 TIME_BUDGET = int(os.environ.get('SYNC_TIME_BUDGET', 8 * 60))       # 總執行時間上限（秒），超過就先存已抓到的，其餘下次再抓
+IMAGE_SCAN_BYTES = 3_000_000  # 找照片時，每篇文章最多讀多少（位元組）
 REQUEST_LIMIT = int(os.environ.get('SYNC_REQUEST_LIMIT', 45))        # 單一網頁最多等幾秒
 KEEPALIVE_DAYS = 30        # 內容沒變時，每隔幾天仍更新一次時間戳，避免 GitHub 停用排程
 # ================================================
@@ -151,9 +152,35 @@ IMG_RE = re.compile(r'(?i)(?:src|href)\s*=\s*["\']([^"\']*/upload/site_item/[^"\
 
 
 def first_image(article_url):
-    page = fetch(article_url)
-    m = IMG_RE.search(page)
-    return urljoin(article_url, html.unescape(m.group(1))) if m else ''
+    """只讀文章開頭，找到第一張照片就停；網頁太大（照片直接嵌在網頁裡）時，讀到上限就放棄。"""
+    found, t0 = {}, time.monotonic()
+
+    def work():
+        try:
+            req = urllib.request.Request(article_url, headers={'User-Agent': UA})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                buf = b''
+                while len(buf) < IMAGE_SCAN_BYTES and time.monotonic() - t0 < REQUEST_LIMIT:
+                    b = r.read(32768)
+                    if not b:
+                        break
+                    tail = buf[-400:] + b   # 只搜尋新讀到的部分（留一點重疊，避免網址被切斷）
+                    buf += b
+                    m = IMG_RE.search(tail.decode('utf-8', errors='ignore'))
+                    if m:
+                        found['url'] = urljoin(article_url, html.unescape(m.group(1)))
+                        return
+        except Exception as e:  # noqa: BLE001
+            found['err'] = e
+    th = threading.Thread(target=work, daemon=True)
+    th.start()
+    th.join(REQUEST_LIMIT + 5)
+    took = time.monotonic() - t0
+    if 'err' in found:
+        print(f'  ! 讀取文章失敗（{took:.0f} 秒）{article_url}：{found["err"]}', file=sys.stderr)
+        raise RuntimeError(article_url)
+    print(f'    ✓ {took:.1f} 秒　{article_url}')
+    return found.get('url', '')
 
 
 def crawl(section, cid, cache):

@@ -35,6 +35,37 @@ function parseCSV(text){
   return rows.filter(r => r.some(c => c.trim())).map(r => Object.fromEntries(head.map((h,i) => [h, (r[i] ?? '').trim()])));
 }
 
+/* ---------- 醫院網頁自動同步（cms.json，由 GitHub 排程每天更新） ---------- */
+async function loadCms(){
+  const tries = [];
+  if (CFG.cmsJson) tries.push(CFG.cmsJson);
+  // 在 GitHub Pages 上直接讀最新版（不必等網站重新發佈）
+  const h = location.hostname;
+  if (h.endsWith('.github.io')){
+    const owner = h.split('.')[0];
+    const repo = location.pathname.split('/').filter(Boolean)[0] || h;
+    tries.push(`https://raw.githubusercontent.com/${owner}/${repo}/main/cms.json?t=${Date.now()}`);
+  }
+  tries.push('cms.json');
+  for (const u of tries){
+    try { const r = await fetch(u, {cache:'no-store'}); if (r.ok) return await r.json(); } catch(e){}
+  }
+  return null;
+}
+const keyOf = r => { const u = String(r['文章連結'] || r['連結'] || ''); const m = u.match(/[?&]Key=(\d+)/i); return m ? 'k' + m[1] : (u || r['標題']); };
+/* 醫院網頁的文章為主，試算表同一篇（同一個文章連結）有填的欄位會覆蓋；試算表多出的列也會加入 */
+function merge(auto, sheet){
+  const map = new Map();
+  (auto || []).forEach(r => map.set(keyOf(r), {...r}));
+  (sheet || []).forEach(r => {
+    const k = keyOf(r), base = map.get(k) || {};
+    const o = {...base};
+    Object.entries(r).forEach(([f,v]) => { if (String(v ?? '').trim() !== '') o[f] = v; });
+    map.set(k, o);
+  });
+  return [...map.values()];
+}
+
 async function loadData(){
   const def = window.DEFAULT_DATA || {};
   const t = CFG.tabs || {};
@@ -77,12 +108,13 @@ function gcal(c, d){
 }
 
 /* ---------- 畫面 ---------- */
-function render({data, src}){
+function render({data, src, cms: auto}){
   const T = CFG.tabs, cms = CFG.cms || {};
   const news = (data[T.news] || []).filter(shown);
   const courses = (data[T.courses] || []).filter(shown).map(c => ({...c, ...courseInfo(c)}));
-  const results = (data[T.results] || []).filter(shown).sort((a,b) => (parseDate(b['日期'])||0) - (parseDate(a['日期'])||0));
-  const minutes = (data[T.minutes] || []).filter(shown);
+  const results = merge(auto && auto.results, data[T.results]).filter(shown).sort((a,b) => (parseDate(b['日期'])||0) - (parseDate(a['日期'])||0));
+  const minutes = merge(auto && (auto.minutes || []).map(m => ({...m, '連結': m['文章連結']})), data[T.minutes]).filter(shown)
+    .sort((a,b) => (parseDate(b['日期'])||0) - (parseDate(a['日期'])||0));
   const res = (data[T.resources] || []).filter(shown);
 
   // 原系統連結
@@ -116,8 +148,11 @@ function render({data, src}){
   $('#stats').innerHTML = stat.map(([k,v,u]) => `<div><dt>${k}</dt><dd>${v}<small>${u}</small></dd></div>`).join('');
 
   // 成果亮點：精選打勾者，最多 3 則
-  let feats = results.filter(r => yes(r['精選'])).slice(0,3);
-  if (!feats.length) feats = results.slice(0,3);
+  const feats = [];
+  const addF = r => { if (feats.length < 3 && !feats.includes(r)) feats.push(r); };
+  results.filter(r => yes(r['精選'])).forEach(addF);
+  results.filter(r => url(r['圖片連結'])).forEach(addF);
+  results.forEach(addF);
   const fb = ['', ' alt', ' alt2'];
   $('#features').innerHTML = feats.map((r,i) => {
     const img = url(r['圖片連結']);
@@ -185,8 +220,10 @@ function render({data, src}){
       `<a class="res${mini ? ' mini' : ''}" href="${url(r['連結']) || '#'}"><strong>${esc(r['標題'])}</strong>${r['說明'] ? `<span>${esc(r['說明'])}</span>` : ''}</a>`).join('')}</div></div>`;
   }).join('');
 
-  $('#dataSrc').textContent = src;
+  let s2 = src;
+  if (auto && auto.updated){ const t = new Date(auto.updated); if (!isNaN(t)) s2 += `・醫院網頁同步於 ${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`; }
+  $('#dataSrc').textContent = s2;
 }
 
-loadData().then(render);
+Promise.all([loadData(), loadCms()]).then(([d, cms]) => { d.cms = cms; render(d); });
 }

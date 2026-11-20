@@ -4,7 +4,7 @@
 window.SITE_CONFIG = {
   // Google 試算表 ID：網址 https://docs.google.com/spreadsheets/d/【這一段】/edit
   // 留空（''）時，網站會使用 data.js 裡的內建資料。
-  sheetId: '',
+  sheetId: '15Im0pK3oKvhn4FeEqZtsrpvIT3r8bEik',
 
   // 試算表的分頁名稱（要和試算表下方的分頁標籤一模一樣）
   tabs: {

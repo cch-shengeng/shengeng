@@ -4,7 +4,7 @@
 const CFG = window.SITE_CONFIG || {tabs:{},cms:{}};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const url = s => { s = String(s || '').trim(); return /^https?:\/\//i.test(s) ? encodeURI(decodeURI(s)) : ''; };
+const url = s => { s = String(s || '').trim(); if (!/^https?:\/\//i.test(s)) return ''; try { return encodeURI(decodeURI(s)); } catch(e){ return encodeURI(s); } };
 const yes = v => /^(true|是|v|✔|✓|y|yes|1)$/i.test(String(v ?? '').trim());
 const shown = r => !/^(false|否|n|no|0)$/i.test(String(r['刊登'] ?? '').trim());
 const WEEK = '日一二三四五六';
@@ -66,6 +66,40 @@ function merge(auto, sheet){
   return [...map.values()];
 }
 
+/* 課程：醫院網頁的課程清單為主；試算表同一堂課（同日期、名稱相近）只補空白欄位，也可用「刊登 = FALSE」隱藏 */
+const norm = t => String(t || '').replace(/[\s　\-－─—–:：、，,（）()「」『』【】\[\]·・.。!！?？]/g, '').toLowerCase();
+const sameTitle = (a, b) => { a = norm(a); b = norm(b); if (!a || !b) return false; const n = Math.min(8, a.length, b.length); return a.includes(b.slice(0, n)) || b.includes(a.slice(0, n)); };
+function mergeCourses(auto, sheet){
+  const list = (auto || []).map(r => ({...r}));
+  (sheet || []).forEach(r => {
+    const d = parseDate(r['日期']);
+    const hit = list.find(a => { const ad = parseDate(a['日期']); return d && ad && +d === +ad && sameTitle(a['課程名稱'], r['課程名稱']); });
+    if (!hit){ list.push({...r}); return; }
+    Object.entries(r).forEach(([f,v]) => { if (String(v ?? '').trim() !== '' && String(hit[f] ?? '').trim() === '') hit[f] = v; });
+    if (r['刊登'] !== undefined && String(r['刊登']).trim() !== '') hit['刊登'] = r['刊登'];
+  });
+  list.forEach(c => {
+    const t = c['課程名稱'] || '', place = c['地點'] || '';
+    if (!c['類別']) c['類別'] = /IPE|跨領域/i.test(t) ? 'IPE' : /與時俱進/.test(t) ? '與時俱進' : /工作坊/.test(t) ? '工作坊' : /研習營/.test(t) ? '研習營' : /參訪|觀摩/.test(t) ? '參訪觀摩' : '課程';
+    if (!c['授課方式']){
+      const online = /webex|視訊|線上|teams|meet/i.test(place), onsite = /樓|講堂|教室|中心|會議室/.test(place);
+      c['授課方式'] = online && onsite ? '混合' : online ? '視訊' : place ? '實體' : '';
+    }
+  });
+  return list;
+}
+/* 資源：試算表「資源」分頁＋醫院網頁「數位學習與服務」「多元教學資源」；同分類同名稱以試算表為準 */
+function mergeResources(sheet, auto){
+  const out = [...(sheet || [])];
+  [['數位學習與服務', auto && auto.digital], ['多元教學資源', auto && auto.teaching]].forEach(([g, items]) => {
+    (items || []).forEach(it => {
+      if (out.some(r => r['分類'] === g && (sameTitle(r['標題'], it['標題']) || keyOf(r) === keyOf(it)))) return;
+      out.push({'分類': g, '標題': it['標題'], '說明': it['摘要'] || '', '連結': it['文章連結'], '刊登': 'TRUE'});
+    });
+  });
+  return out;
+}
+
 async function loadData(){
   const def = window.DEFAULT_DATA || {};
   const t = CFG.tabs || {};
@@ -93,6 +127,7 @@ function courseInfo(c){
   const how = c['報名方式'] || '';
   let st, label;
   if (!d || d < today){ st = 'past'; label = '已結束'; }
+  else if (!how.trim() && !url(c['報名連結'])){ st = 'info'; label = '即將舉行'; }
   else if (/待公告/.test(how) || (!url(c['報名連結']) && /表單/.test(how))){ st = 'tba'; label = '報名待公告'; }
   else if (dl && dl < today){ st = 'closed'; label = '報名已截止'; }
   else if (dl && (dl - today) / 864e5 <= 7){ st = 'soon'; label = '即將截止'; }
@@ -111,11 +146,11 @@ function gcal(c, d){
 function render({data, src, cms: auto}){
   const T = CFG.tabs, cms = CFG.cms || {};
   const news = (data[T.news] || []).filter(shown);
-  const courses = (data[T.courses] || []).filter(shown).map(c => ({...c, ...courseInfo(c)}));
+  const courses = mergeCourses(auto && auto.courses, data[T.courses]).filter(shown).map(c => ({...c, ...courseInfo(c)}));
   const results = merge(auto && auto.results, data[T.results]).filter(shown).sort((a,b) => (parseDate(b['日期'])||0) - (parseDate(a['日期'])||0));
   const minutes = merge(auto && (auto.minutes || []).map(m => ({...m, '連結': m['文章連結']})), data[T.minutes]).filter(shown)
     .sort((a,b) => (parseDate(b['日期'])||0) - (parseDate(a['日期'])||0));
-  const res = (data[T.resources] || []).filter(shown);
+  const res = mergeResources(data[T.resources], auto).filter(shown);
 
   // 原系統連結
   [['#resultsMore',cms.results],['#coursesMore',cms.courses],['#minutesMore',cms.minutes],['#contactLink',cms.contacts],['#lnkContacts',cms.contacts],['#lnkExperts',cms.experts]]
@@ -186,6 +221,8 @@ function render({data, src, cms: auto}){
       const links = [
         url(c['海報連結']) && `<a class="lnk" href="${url(c['海報連結'])}">活動海報</a>`,
         url(c['簡章連結']) && `<a class="lnk" href="${url(c['簡章連結'])}">下載簡章</a>`,
+        url(c['議程連結']) && `<a class="lnk" href="${url(c['議程連結'])}">議程表</a>`,
+        url(c['來源連結']) && `<a class="lnk" href="${url(c['來源連結'])}">原始公告</a>`,
         c.st !== 'past' && d && `<a class="lnk" href="${gcal(c,d)}">加入 Google 行事曆</a>`
       ].filter(Boolean).join('');
       return `<li class="course ${c.st === 'past' ? 'past' : ''}">
@@ -224,6 +261,15 @@ function render({data, src, cms: auto}){
   if (auto && auto.updated){ const t = new Date(auto.updated); if (!isNaN(t)) s2 += `・醫院網頁同步於 ${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`; }
   $('#dataSrc').textContent = s2;
 }
+
+/* ---------- 手機選單 ---------- */
+const top = $('.top'), mbtn = $('#menuBtn');
+const setMenu = open => { top.classList.toggle('open', open); mbtn.setAttribute('aria-expanded', open); mbtn.setAttribute('aria-label', open ? '關閉選單' : '開啟選單'); };
+mbtn.addEventListener('click', e => { e.stopPropagation(); setMenu(!top.classList.contains('open')); });
+$('#mainNav').addEventListener('click', e => { if (e.target.closest('a')) setMenu(false); });
+document.addEventListener('click', e => { if (top.classList.contains('open') && !top.contains(e.target)) setMenu(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && top.classList.contains('open')){ setMenu(false); mbtn.focus(); } });
+matchMedia('(min-width:1101px)').addEventListener('change', e => { if (e.matches) setMenu(false); });
 
 Promise.all([loadData(), loadCms()]).then(([d, cms]) => { d.cms = cms; render(d); });
 }

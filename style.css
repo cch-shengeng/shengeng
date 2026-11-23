@@ -159,7 +159,7 @@ img{max-width:100%;display:block}
 .badge.st-open{background:var(--deep);color:var(--bg)}
 .badge.st-soon{background:var(--gold);color:#2b2414}
 .badge.st-closed,.badge.st-past{background:var(--paper);color:var(--muted)}
-.badge.st-tba{background:color-mix(in srgb,var(--info) 18%,transparent);color:var(--info)}
+.badge.st-info,.badge.st-tba{background:color-mix(in srgb,var(--info) 18%,transparent);color:var(--info)}
 .meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 20px;margin:0;font-size:15px;color:var(--muted)}
 .meta div{display:flex;gap:8px}
 .meta dt{flex:none;color:var(--info);font-weight:700}
@@ -205,7 +205,24 @@ img{max-width:100%;display:block}
 .src{font-size:13px;opacity:.8}
 
 /* ---------- responsive ---------- */
-@media (max-width:1100px){.nav{display:none}.top-cta{margin-left:auto}}
+/* ---------- 手機選單按鈕 ---------- */
+.menu-btn{display:none;flex:none;width:48px;height:48px;border:0;border-radius:14px;background:var(--deep);cursor:pointer;
+  padding:0;place-content:center;gap:5px;box-shadow:var(--shadow)}
+.menu-btn span{display:block;width:22px;height:2.5px;border-radius:2px;background:var(--bg);transition:transform .2s,opacity .2s}
+.top.open .menu-btn span:nth-child(1){transform:translateY(7.5px) rotate(45deg)}
+.top.open .menu-btn span:nth-child(2){opacity:0}
+.top.open .menu-btn span:nth-child(3){transform:translateY(-7.5px) rotate(-45deg)}
+@media (max-width:1100px){
+  .top{flex-wrap:wrap}
+  .top-cta{margin-left:auto}
+  .menu-btn{display:grid}
+  .nav{display:none;order:9;flex-basis:100%;flex-direction:column;gap:2px;margin:6px 0 4px;padding:8px;
+    background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+  .top.open .nav{display:flex}
+  .nav a{padding:14px 16px;font-size:17px;border-radius:12px}
+  .nav a+a{border-top:1px solid var(--line)}
+}
+@media (max-width:420px){.top-cta{display:none}.menu-btn{margin-left:auto}}
 @media (max-width:900px){
   .hero{grid-template-columns:1fr}
   .hero-copy{order:-1}
@@ -232,7 +249,7 @@ img{max-width:100%;display:block}
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   .ticker-track{animation:none;flex-wrap:wrap;width:auto;row-gap:6px}
-  .btn,.feature,.res{transition:none}
+  .btn,.feature,.res,.menu-btn span{transition:none}
 }
 
 /* ---------- 夜間模式：水彩淡化 ---------- */

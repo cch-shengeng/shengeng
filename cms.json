@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-20T18:29:09+08:00",
+ "updated": "2026-11-23T13:16:49+08:00",
  "source": "https://dpt.cch.org.tw/layout/layout_1/index.aspx?ID=91192",
  "results": [
   {
@@ -123,6 +123,108 @@
    "標題": "114 年教學部深耕計畫工作討論會議清單",
    "摘要": "",
    "文章連結": "https://dpt.cch.org.tw/layout/layout_1/item_detail.aspx?ID=91192&cID=611&Key=4329"
+  }
+ ],
+ "digital": [
+  {
+   "key": "4380",
+   "日期": "2026/08/05",
+   "標題": "彰化基督教醫院圖書館文獻傳遞服務",
+   "摘要": "",
+   "文章連結": "https://dpt.cch.org.tw/layout/layout_1/item_detail.aspx?ID=91192&cID=609&Key=4380"
+  }
+ ],
+ "teaching": [],
+ "courses": [
+  {
+   "季別": "116-Q1",
+   "日期": "2027/01/08",
+   "開始": "12:00",
+   "結束": "15:40",
+   "課程名稱": "健康台灣深耕計畫-VR 師資培訓工作坊",
+   "地點": "彰基／教學研究大樓10樓／臨床／技能訓練中心團隊互動訓練教室",
+   "報名方式": "線上表單",
+   "報名連結": "https://docs.google.com/forms/d/e/1FAIpQLSfGonQSJQFXU4KhDp06dnwXzn5xo4vt_d12zMHP9hfZiVQgrA/viewform?usp=publish-editor",
+   "報名截止": "2026/12/23",
+   "海報連結": "https://dpt.cch.org.tw/upload/site_news/91192/8144/116-01-08VR師資培訓工作坊海報.png",
+   "簡章連結": "https://dpt.cch.org.tw/upload/site_news/91192/8144/(簡章)1160108-VR師培訓練工作坊.pdf",
+   "備註": "每家合作醫院各3-4名， 報名截止日115/12/23。",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=13031"
+  },
+  {
+   "季別": "115-Q4",
+   "日期": "2026/11/05",
+   "開始": "16:30",
+   "結束": "17:30",
+   "課程名稱": "全人跨領域團隊合作照護教育訓練(IPE)課程-協助改善重聽失智症患者情緒異常行為",
+   "地點": "Webex視訊",
+   "報名方式": "洽合作醫院窗口",
+   "報名連結": "",
+   "報名截止": "2026/10/22",
+   "海報連結": "",
+   "簡章連結": "",
+   "備註": "合適職類 ： 醫事放射、護理、物理治療、營養、西醫 報名截止日2026-10-22",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=12733"
+  },
+  {
+   "季別": "115-Q4",
+   "日期": "2026/11/04",
+   "開始": "13:30",
+   "結束": "15:30",
+   "課程名稱": "VR師資培訓工作坊",
+   "地點": "彰基教學研究大樓10樓臨床技能訓練中心",
+   "報名方式": "線上表單",
+   "報名連結": "https://docs.google.com/forms/d/e/1FAIpQLSfT_EvDqxEKBlwGZmb1cjNPBbfkJaE6PIahRRZZsZwwkp_CrA/viewform?usp=header",
+   "報名截止": "",
+   "海報連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/VR海報.png",
+   "簡章連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/(簡章)1104VR師培訓練工作坊.pdf",
+   "備註": "",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=12733"
+  },
+  {
+   "季別": "115-Q4",
+   "日期": "2026/10/09",
+   "開始": "16:30",
+   "結束": "17:30",
+   "課程名稱": "全人跨領域團隊合作照護教育訓練(IPE)課程-協助改善重聽失智症患者情緒異常行為",
+   "地點": "Webex視訊",
+   "報名方式": "洽合作醫院窗口",
+   "報名連結": "",
+   "報名截止": "2026/09/16",
+   "海報連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/IPE課程海報(09-29跟10-09).png",
+   "簡章連結": "",
+   "備註": "合適職類 ：西醫、醫事檢驗、藥事、護理 報名截止日2026-09-16",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=12733"
+  },
+  {
+   "季別": "115-Q4",
+   "日期": "2026/10/02",
+   "開始": "08:50",
+   "結束": "16:15",
+   "課程名稱": "健康台灣深耕計畫－韌性醫療-戰爭傷患照護訓練工作坊",
+   "地點": "彰基／教學研究大樓10樓／臨床／技能訓練中心",
+   "報名方式": "洽合作醫院窗口",
+   "報名連結": "",
+   "報名截止": "",
+   "海報連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/戰傷海報V5.png",
+   "簡章連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/(簡章)彰基-韌性醫療-戰爭傷患照護訓練工作坊.pdf",
+   "備註": "每家合作醫院各4名",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=12733"
+  },
+  {
+   "季別": "115-Q4",
+   "日期": "2026/10/02",
+   "開始": "12:20",
+   "結束": "14:00",
+   "課程名稱": "與時俱進課程─解構醫學核心職能：利用 AI 工具自動化彙整臨床表現與 EPA 評估反饋",
+   "地點": "Webex視訊(合作醫院)／彰基教研大樓11樓魏克思學術講堂",
+   "報名方式": "線上表單",
+   "報名連結": "https://forms.cloud.microsoft/r/mpDEt33Xnd",
+   "報名截止": "",
+   "海報連結": "https://dpt.cch.org.tw/upload/site_news/91192/7843/ChatGPT Image 2026年9月22日 下午02_41_01.png",
+   "簡章連結": "",
+   "備註": "講師：彰化基督教醫院神經醫學中心/陳彥宇教學型主治醫師",
+   "來源連結": "https://dpt.cch.org.tw/layout/layout_1/news_detail.aspx?ID=91192&cID=1349&Key=12733"
   }
  ]
 }

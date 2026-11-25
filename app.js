@@ -66,21 +66,43 @@ function merge(auto, sheet){
   return [...map.values()];
 }
 
-/* 課程：醫院網頁的課程清單為主；試算表同一堂課（同日期、名稱相近）只補空白欄位，也可用「刊登 = FALSE」隱藏 */
+/* 課程：醫院網頁的課程清單為主，試算表同一堂課：
+   - 「課程名稱」「日期」「開始」「結束」有填就覆蓋（用來更正醫院網頁的筆誤）
+   - 其他欄位只補空白；填「-」可清掉醫院網頁那一格（例如放錯的海報）；「刊登 = FALSE」可隱藏
+   對應方式：同日期且名稱相近 → 同日期、同開始時間、同類別（課名寫錯）→ 名稱相同、日期差 31 天內（日期寫錯） */
 const norm = t => String(t || '').replace(/[\s　\-－─—–:：、，,（）()「」『』【】\[\]·・.。!！?？]/g, '').toLowerCase();
 const sameTitle = (a, b) => { a = norm(a); b = norm(b); if (!a || !b) return false; const n = Math.min(8, a.length, b.length); return a.includes(b.slice(0, n)) || b.includes(a.slice(0, n)); };
+const sameName = (a, b) => { a = norm(a); b = norm(b); return !!a && !!b && (a.includes(b) || b.includes(a)); };
+/* 類別：依課程名稱判斷（醫院網頁的「【與時俱進課程】」「【臨床技能訓練】」等標籤也算） */
+const courseType = t => /IPE|跨領域/i.test(t) ? 'IPE' : /與時俱進/.test(t) ? '與時俱進' : /資源利用/.test(t) ? '資源利用'
+  : /臨床技能/.test(t) ? '臨床技能' : /研習營/.test(t) ? '研習營' : /工作坊/.test(t) ? '工作坊' : /參訪|觀摩/.test(t) ? '參訪觀摩' : '課程';
+const rocYear = d => d ? d.getFullYear() - 1911 : 0;
+const FIXED = ['課程名稱', '日期', '開始', '結束'];
+const CLEAR = v => /^[-－—]$/.test(String(v ?? '').trim());
 function mergeCourses(auto, sheet){
   const list = (auto || []).map(r => ({...r}));
+  const free = new Set(list);
+  const pick = test => { for (const a of free) if (test(a)) return a; return null; };
   (sheet || []).forEach(r => {
-    const d = parseDate(r['日期']);
-    const hit = list.find(a => { const ad = parseDate(a['日期']); return d && ad && +d === +ad && sameTitle(a['課程名稱'], r['課程名稱']); });
-    if (!hit){ list.push({...r}); return; }
-    Object.entries(r).forEach(([f,v]) => { if (String(v ?? '').trim() !== '' && String(hit[f] ?? '').trim() === '') hit[f] = v; });
+    const d = parseDate(r['日期']), type = r['類別'] || courseType(r['課程名稱']);
+    const sameDay = a => { const ad = parseDate(a['日期']); return d && ad && +d === +ad; };
+    const near = a => { const ad = parseDate(a['日期']); return d && ad && Math.abs(d - ad) <= 31 * 864e5; };
+    const hit = pick(a => sameDay(a) && sameTitle(a['課程名稱'], r['課程名稱']))
+      || pick(a => sameDay(a) && r['開始'] && a['開始'] === r['開始'] && courseType(a['課程名稱']) === type)
+      || pick(a => near(a) && sameName(a['課程名稱'], r['課程名稱']));
+    if (!hit){ list.push(Object.fromEntries(Object.entries(r).map(([f,v]) => [f, CLEAR(v) ? '' : v]))); return; }
+    free.delete(hit);
+    Object.entries(r).forEach(([f,v]) => {
+      const t = String(v ?? '').trim();
+      if (!t) return;
+      if (CLEAR(t)) hit[f] = '';
+      else if (FIXED.includes(f) || String(hit[f] ?? '').trim() === '') hit[f] = v;
+    });
     if (r['刊登'] !== undefined && String(r['刊登']).trim() !== '') hit['刊登'] = r['刊登'];
   });
   list.forEach(c => {
     const t = c['課程名稱'] || '', place = c['地點'] || '';
-    if (!c['類別']) c['類別'] = /IPE|跨領域/i.test(t) ? 'IPE' : /與時俱進/.test(t) ? '與時俱進' : /工作坊/.test(t) ? '工作坊' : /研習營/.test(t) ? '研習營' : /參訪|觀摩/.test(t) ? '參訪觀摩' : '課程';
+    if (!c['類別']) c['類別'] = courseType(t);
     if (!c['授課方式']){
       const online = /webex|視訊|線上|teams|meet/i.test(place), onsite = /樓|講堂|教室|中心|會議室/.test(place);
       c['授課方式'] = online && onsite ? '混合' : online ? '視訊' : place ? '實體' : '';
@@ -200,13 +222,16 @@ function render({data, src, cms: auto}){
   // 課程篩選
   const types = [...new Set(courses.map(c => c['類別']).filter(Boolean))];
   $('#fType').innerHTML = ['全部類別', ...types].map((t,i) => `<button type="button" data-v="${i ? esc(t) : ''}" aria-pressed="${!i}">${esc(t)}</button>`).join('');
-  const f = {status: upcoming.length >= 2 ? 'upcoming' : 'all', type: '', q: ''};
+  const years = [...new Set(courses.map(c => rocYear(c.d)).filter(Boolean))].sort((a,b) => b - a);
+  $('#fYear').innerHTML = ['全部年度', ...years].map((y,i) => `<button type="button" data-v="${i ? y : ''}" aria-pressed="${!i}">${i ? y + ' 年' : y}</button>`).join('');
+  const f = {status: upcoming.length >= 2 ? 'upcoming' : 'all', type: '', year: '', q: ''};
   $('#fStatus').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === f.status));
 
   const drawCourses = () => {
     let list = courses.filter(c =>
       (f.status === 'all' || (f.status === 'past' ? c.st === 'past' : c.st !== 'past')) &&
       (!f.type || c['類別'] === f.type) &&
+      (!f.year || String(rocYear(c.d)) === f.year) &&
       (!f.q || Object.values(c).join(' ').toLowerCase().includes(f.q)));
     const fut = (a,b) => (a.st === 'past') - (b.st === 'past') || (a.st === 'past' ? (b.d || 0) - (a.d || 0) : (a.d || 0) - (b.d || 0));
     list.sort(fut);
@@ -236,6 +261,9 @@ function render({data, src, cms: auto}){
     $('#fStatus').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); drawCourses(); };
   $('#fType').onclick = e => { const b = e.target.closest('button'); if (!b) return; f.type = b.dataset.v;
     $('#fType').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); drawCourses(); };
+  $('#fYear').onclick = e => { const b = e.target.closest('button'); if (!b) return; f.year = b.dataset.v;
+    if (f.year && f.status === 'upcoming'){ f.status = 'all'; $('#fStatus').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'all')); }
+    $('#fYear').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); drawCourses(); };
   $('#fSearch').oninput = e => { f.q = e.target.value.trim().toLowerCase(); drawCourses(); };
   drawCourses();
 

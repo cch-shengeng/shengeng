@@ -5,7 +5,7 @@
 讀取彰基部門網頁「計畫成果分享」「工作討論議錄」的文章列表，
 整理成 cms.json，讓 GitHub 網頁自動顯示最新文章。
 
-同時讀「數位學習與服務」「多元教學資源」與「課程活動訊息」的最新各季課程清單。
+同時讀「數位學習與服務」「多元教學資源」與「課程活動訊息」中 114 年起的各季課程清單。
 由 .github/workflows/sync-cms.yml 每天自動執行，不需要手動操作。
 只用 Python 內建模組，不需要安裝任何套件。
 
@@ -33,7 +33,8 @@ SECTIONS = {               # 輸出名稱: 醫院系統的分類 cID
 }
 ALLOW_EMPTY = {'digital', 'teaching'}   # 這些分類目前沒有文章也算正常
 COURSE_CID = '1349'        # 最新消息 › 課程活動訊息（每季一篇課程清單）
-COURSE_LISTS = 2           # 讀最新幾季的課程清單（2 = 最新一季＋上一季，避免換季時舊課消失）
+COURSE_MIN_YEAR = 114     # 讀這一年（民國）以後的所有季課程清單；想顯示更早的課程就把數字改小
+COURSE_MIN_LISTS = 2       # 至少讀最新幾季（避免設定年份太新時課程消失）
 GET_IMAGE = {'results'}    # 這些分類會進入文章抓第一張照片
 MAX_PAGES = 20             # 每個分類最多讀幾頁列表
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cms.json')
@@ -310,6 +311,12 @@ def parse_course_table(page_html, season):
         if not dm:
             continue
         tm = re.search(r'(\d{1,2}:\d{2})\s*[~～\-–－至到]\s*(\d{1,2}:\d{2})', dt)
+        t_start, t_end = (tm.group(1), tm.group(2)) if tm else ('', '')
+        if t_end and int(t_end.split(':')[0]) < 12 and t_end.zfill(5) < t_start.zfill(5):
+            # 結束早於開始的筆誤：「14:00~06:30」多半是少打一個 1（16:30），不合理時再改成加 12 小時
+            h, mi = t_end.split(':')
+            h = int(h)
+            t_end = f'{h + 10:02d}:{mi}' if f'{h + 10:02d}:{mi}' > t_start.zfill(5) else f'{h + 12:02d}:{mi}'
         # 課程名稱可能分兩行：「與時俱進課程─」＋「解構…」
         tl = text_parts(g('title'))
         title = ''
@@ -349,7 +356,7 @@ def parse_course_table(page_html, season):
                 deadline = roc_date(cy - 1 if mo > cm else cy, mo, dl2.group(2))
         courses.append({
             '季別': season, '日期': roc_date(*dm.groups()),
-            '開始': tm.group(1) if tm else '', '結束': tm.group(2) if tm else '',
+            '開始': t_start, '結束': t_end,
             '課程名稱': title, '地點': place, '報名方式': how, '報名連結': reg_url,
             '報名截止': deadline, '海報連結': poster, '簡章連結': brochure, '備註': note,
         })
@@ -357,10 +364,28 @@ def parse_course_table(page_html, season):
 
 
 def crawl_courses():
-    lists = parse_news_list(fetch(f'{BASE}news.aspx?cID={COURSE_CID}&ID={SITE_ID}'))
+    lists, seen = [], set()
+    for p in range(1, MAX_PAGES + 1):  # 課程清單變多時，列表會分頁
+        url = f'{BASE}news.aspx?cID={COURSE_CID}&ID={SITE_ID}' + (f'&p={p}' if p > 1 else '')
+        try:
+            page = parse_news_list(fetch(url))
+        except RuntimeError as e:
+            if p == 1:
+                raise
+            print(f'  ! 課程列表第 {p} 頁讀取失敗，先用已讀到的：{e}', file=sys.stderr)
+            break
+        new = [x for x in page if x['key'] not in seen]
+        if not new:
+            break
+        seen.update(x['key'] for x in new)
+        lists += new
+        time.sleep(1)
+    lists.sort(key=lambda x: x['order'], reverse=True)
     print(f'  找到 {len(lists)} 季課程清單：' + '、'.join(x['season'] for x in lists))
+    pick = [x for i, x in enumerate(lists) if i < COURSE_MIN_LISTS or x['order'][0] >= COURSE_MIN_YEAR]
+    print(f'  讀取 {COURSE_MIN_YEAR} 年起共 {len(pick)} 季')
     out = []
-    for it in lists[:COURSE_LISTS]:
+    for it in pick:
         rows, ok = parse_course_table(fetch(it['url']), it['season'])
         print(f'  {it["season"]}：{len(rows)} 堂課' + ('' if ok else '（找不到課程表格）'))
         for r in rows:
